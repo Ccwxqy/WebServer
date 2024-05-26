@@ -17,7 +17,7 @@ class Log{
         char log_name[128];//log文件名
         //日志参数
         int m_split_lines; //日志最大行数
-        int m_log_buf_lines; //日志缓冲区大小
+        int m_log_buf_size; //日志缓冲区大小
         int m_today; //日志记录按天分类，记录当前时间是哪一天
         long long m_count; //日志行数记录
         //文件指针和缓冲区
