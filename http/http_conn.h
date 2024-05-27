@@ -146,11 +146,11 @@ class http_conn{
 
         //缓冲区与索引
         char m_read_buf[READ_BUFFER_SIZE];//读缓冲区 用于存储从客户端接收到的数据
-        long m_read_idx;//当前读缓冲区中数据的索引
+        long m_read_idx;//当前读缓冲区中数据的结束索引(从1开始，也即读缓冲区中有多少字符)
         long m_checked_idx;//已检查的数据位置索引
         int m_start_line;//当前解析行的起始位置
         char m_write_buf[WRITE_BUFFER_SIZE];//写缓冲区 用于存储要发送给客户端的数据
-        int m_write_idx;//写缓冲区中的数据的索引
+        int m_write_idx;//写缓冲区中的数据的结束索引(从1开始，也即写缓冲区中有多少字符)
 
         //HTTP请求解析
         CHECK_STATE m_check_state;//当前的请求解析状态
