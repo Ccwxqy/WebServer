@@ -243,3 +243,96 @@ http_conn::LINE_STATUS http_conn::parse_line(){
     //都没有找到\r 或 \n 说明还要继续找
     return LINE_OPEN;
 }
+
+//read_once函数 用于非阻塞模式下从客户端循环读取数据（从套接字读取数据至内部缓冲区），直到没有更多数据可读或连接被关闭
+//处理两种不同的触发模式 水平触发(LT) 边缘触发(ET)
+bool http_conn::read_once(){
+    //检查缓冲区空间 确保读缓冲区有足够的空间来存储新数据
+    //如果读索引m_read_idx已经等于或超过缓冲区大小 READ_BUFFER_SIZE ,则没有空间进一步读取，返回false
+    if(m_read_idx>=READ_BUFFER_SIZE){
+        return false;
+    }
+    
+    int bytes_read=0;//存储每次通过recv调用返回的实际读取的字节数
+
+    //水平触发LT模式  每次触发读事件时调用 recv 尝试读取数据。读取结果立刻增加到 m_read_idx 上
+    //recv 尝试从套接字 m_sockfd 读取最多READ_BUFFER_SIZE-m_read_idx字节的数据到缓冲区m_read_buf中 且从m_read_idx出开始
+    //recv返回实际读取到的字节数，这些字节数已经被存储到缓冲区中  返回0：表示对端已经关闭了连接，没有更多数据可以读取  返回-1：表示读取操作失败
+    if(m_TRIGMode==0){
+        bytes_read=recv(m_sockfd,m_read_buf+m_read_idx,READ_BUFFER_SIZE-m_read_idx,0);
+        m_read_idx+=bytes_read;//更新m_read_idx索引
+        if(bytes_read<=0){
+            return false;
+        }
+        return true;
+    }else{
+        //ET模式 
+        //循环读取数据  一旦事件被触发，必须读取所有可用的数据，因为后续不会再有通知，除非有新数据到来
+        while(true){
+            bytes_read=recv(m_sockfd,m_read_buf+m_read_idx,READ_BUFFER_SIZE-m_read_idx,0);
+            //错误和数据读取结束处理
+            if(bytes_read==-1){
+                ////读取错误 需要检查errno 
+                if(errno==EAGAIN||errno==EWOULDBLOCK)break;//EAGAIN或EWOULDBLOCK：表示非阻塞套接字没有更多数据可读 在ET模式下，这是退出循环的信号，因为所有数据已被读取
+                return false;//其他错误
+            }else if(bytes_read==0){
+                //连接的对方已经正常关闭了连接
+                return false;
+            }
+            m_read_idx+=bytes_read;//成功读取了bytes_read字节数的数据，更新m_read_idx以反映新数据的结束位置
+        }
+        return true;//成功读取数据到读缓冲区
+    }
+}
+
+//parse_request_line 解析HTTP请求的起始行 并确定请求的类型 目标URL 和HTTP版本   这是HTTP请求处理的第一步
+//http请求行标准格式---------------------------------------------->>>>>>>>>>>>>>>       请求方法->空格->URL->空格->版本->回车符->换行符
+http_conn::HTTP_CODE http_conn::parse_request_line(char *text){
+    //解析请求方法
+    m_url=strpbrk(text," \t");//strpbrk在text中查找第一个空格或制表符，这通常用来分隔HTTP方法和URL  
+    if(!m_url){
+        return BAD_REQUEST;//未找到意味着请求格式错误
+    }
+    *m_url++='\0';//将找到的空格替换为字符串结束符'\0'，从而将方法字符串与后续字符串分开
+    char *method=text;//method指向请求方法
+
+    //确定HTTP方法  支持GET 或 POST方法 不区分大小写
+    if(strcasecmp(method,"GET")==0){
+        m_method=GET;
+    }else if(strcasecmp(method,"POST")==0){
+        m_method=POST;
+        cgi=1;//表示可能需要处理动态资源
+    }else{
+        return BAD_REQUEST;
+    }
+
+    //解析URL和版本
+    m_url+=strspn(m_url," \t");//让m_url指向了URL开头位置
+    m_version=strpbrk(m_url," \t");//m_version指向了空格或\t，后面紧接着就是version(可能还有空格或\t)
+    if(!m_version)return BAD_REQUEST;
+    *m_version++='\0';//将找到的空格替换为字符串结束符'\0'，从而将URL与version断开
+    m_version+=strspn(m_version," \t");//m_version真正指向了version开头
+
+    //验证HTTP版本
+    if(strcasecmp(m_version,"HTTP/1.1")!=0)return BAD_REQUEST;//只支持HTTP/1.1版本
+
+    //处理URL   如果url是以 'http://' 或'https://'开头，跳过这些协议标记，并将URL调整为从第一个'/'开始的路径部分 
+    if(strcasecmp(m_url,"http://",7)==0){
+        m_url+=7;
+        m_url=strstr(m_url,'/');//确保调整后的url是以'/'开头，否则返回错误
+    }
+    if(strcasecmp(m_url,"https://",8)==0){
+        m_url+=8;
+        m_url=strstr(m_url,'/');
+    }
+    if(!m_url||m_url[0]!='/'){
+        return BAD_REQUEST;
+    }
+
+    //默认页面设置
+    if(strlen(m_url)==1)strcat(m_url,"judge.html");//如果URL只是'/',则添加默认页面"judge.html"
+
+    //更新状态并返回
+    m_check_state=CHECK_STATE_HEADER;//请求行解析完毕，更新状态为CHECK_STATE_HEADER 准备解析头部
+    return NO_REQUEST;//返回 NO_REQUEST表示请求还未处理完，需要继续解析头部
+}
