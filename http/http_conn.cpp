@@ -336,3 +336,447 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text){
     m_check_state=CHECK_STATE_HEADER;//请求行解析完毕，更新状态为CHECK_STATE_HEADER 准备解析头部
     return NO_REQUEST;//返回 NO_REQUEST表示请求还未处理完，需要继续解析头部
 }
+
+//parse_headers 用于解析HTTP请求头字段 
+//请求头标准格式 ----------------------------------------->>>>> 头部字段名->:->值->回车符->换行符    -----|
+//------------------------------------------------------->>>>> 头部字段名->:->值->回车符->换行符         |---->>>请求头部
+//------------------------------------------------------->>>>> 头部字段名->:->值->回车符->换行符   ------|
+http_conn::HTTP_CODE http_conn::parse_headers(char *text){
+    //处理请求头部结束的情况     HTTP协议规定：在请求头结束后会紧接着加入一行空白行，即为一行全为'\0'字符，代表了请求头部的结束
+    if(text[0]=='\0'){
+        //内容长度检查  如果m_content_length不为零，说明请求有内容体(通常与POST请求相关),那么状态就转移到CHECK_STATE_CONTENT以准备读取请求内容体
+        if(m_content_length!=0){
+            m_check_state=CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+        return GET_REQUEST;//如果没有请求体，请求头已经完全解析完成，返回GET_REQUEST表示GET请求可以被处理   
+        //解析具体头部字段
+    }else if(strcasecmp(text,"Connection:",11)==0){
+        //Connection头处理
+        text+=11;
+        text+=strspn(text," \t");//text指向了 Connection:之后 值 的开始部分(跳过可能存在的TAB键或空格)
+        if(strcasecmp(text,"Keep-alive")==0){
+            m_linger=true;//保持连接
+        }
+    }else if(strcasecmp(text,"Content-length:",15)==0){
+        //获取请求的内容长度
+        text+=15;
+        text+=strspn(text," \t");
+        m_content_length=atol(text);//提取并转换Content-length的值，存储在m_content_length中
+    }else if(strcasecmp(text,"Host:",5)==0){
+        //解析请求头中的 Host
+        text+=5;
+        text+=strspn(text," \t");
+        m_host=text;
+    }else{
+        //处理为止头部  对于不识别的头部字段，记录信息，以便进行调试或日志记录
+        LOG_INFO("oop!unknow header: %s",text);
+    }
+    return NO_REQUEST;//头部字段已被处理，但请求还需要进一步读取 请求体或处理其他请求头
+}
+
+//parse_content 用于解析HTTP请求体 一般是处理POST请求  关键在于是否已经接收完整的请求内容
+http_conn::HTTP_CODE http_conn::parse_content(char *text){
+    //检查内容完整性
+    //检查已经读取到的数据索引 m_read_idx是否至少为 m_content_length(请求内容的长度)+m_check_idx(已经检查到的位置索引),确保整个请求内容已经被接收到读缓冲区
+    if(m_read_idx>=(m_content_length+m_checked_idx)){
+        //设置内容体结束标志
+        text[m_content_length]='\0';//在内容体的末尾添加字符串结束符'\0'，这样text指向的数据可以作为标准的C字符串处理
+        //保存内容体
+        m_string=text;
+        //如果内容体被成功解析，即使是POST请求，这里仍返回GET_REQUEST；
+        return GET_REQUEST;
+    }
+    //内容没有完整被接收 服务器还需要继续读取数据
+    return NO_REQUEST;
+}
+
+//process_read 负责处理HTTP请求的读取和解析过程 根据当前的解析状态 m_check_state来调用响应的解析函数，并管理解析过程中的状态转换
+//包含从请求行的解析到请求头的处理，再到请求体的读取
+http_conn::HTTP_CODE http_conn::process_read(){
+    //初始化状态和变量
+    LINE_STATUS line_status=LINE_OK;//初始化line_status表示行解析状态
+    HTTP_CODE ret=NO_REQUEST;//ret表示尚未得到完整的请求
+    char *text=0;//指向当前正在解析的文本行
+
+    //循环解析
+    //条件1 m_check_state==CHECK_STATE_CONTENT&&line_status==LINE_OK:表示当前解析状态是内容体解析并且当前行的状态是LINE_OK，继续循环 这意味着内容体可能未完成解析，需要继续处理剩余数据
+    //条件2 (line_status==parse_line())==LINE_OK:表示尝试解析新的一行，如果解析成功返回LINE_OK，则继续循环。这里实现一个边读取边赋值的操作，确保每次循环都重新评估当前行的解析状态
+    while((m_check_state==CHECK_STATE_CONTENT&&line_status==LINE_OK)||((line_status=parse_line())==LINE_OK)){
+        //行数据提取 调用get_line()方法获取当前解析的行，函数返回指向读缓冲区中当前行起始位置的指针，该位置由m_start_line定位
+        text=get_line();
+        //更新行起始位置  在每次循环开始时更新m_start_line的值为m_checked_idx(标识读缓冲区中已经检查到的位置)。为下一次行解析做准备，确保get_line()能够正确获取到新的行起始位置
+        m_start_line=m_checked_idx;
+        //日志记录 将当前解析的行内容输出到日志系统 
+        LOG_INFO("%s",text);
+        //根据当前的解析状态m_check_state决定下一步的操作
+        switch(m_check_state){
+            //解析请求行
+            case CHECK_STATE_REQUESTLINE:{
+                ret=parse_request_line(text);//调用parse_request_line解析HTTP请求行 
+                if(ret==BAD_REQUEST)return BAD_REQUEST;//说明请求行格式不正确
+                break;//状态转换，如果请求行解析成功，m_check_state会在parse_request_line方法中更新为CHECK_STATE_HEADER，以便开始解析头部
+            }
+            //解析请求头
+            case CHECK_STATE_HEADER:{
+                ret=parse_headers(text);
+                if(ret==BAD_REQUEST){
+                    return BAD_REQUEST;
+                }else if(ret==GET_REQUEST){
+                    return do_request();//如果parse_headers函数返回GET_REQUEST，表示头部已经完全解析且没有请求体的存在，如GET请求，则调用do_request来处理请求并生成响应
+                }
+                break;//状态转换，如果content-length长度不为零，或请求方法是POST，m_check_state在parse_headers内杯被更新为CHECK_STATE_CONTENT
+            }
+            //解析请求体
+            case CHECK_STATE_CONTENT:{
+                ret=parse_content(text);
+                if(ret==GET_REQUEST){
+                    return do_request();
+                }
+                line_status=LINE_OPEN;//标识请求体可能还未完全接收，需要继续接收数据
+                break;
+            }
+            //默认错误处理
+            default:
+                return INTERNAL_ERROR;//内部处理错误
+        }
+    }
+    return NO_REQUEST;//表示当前还没有接收到完整的请求，需要继续从网络读取数据
+}
+
+//do_request函数 用于处理解析完成的HTTP请求，根据请求的类型(如GET或POST)和路径来决定服务器如何响应  涉及到请求的最终处理和资源定位
+//函数执行任务包括 构造文件路径  处理CGI请求(例如处理登陆和注册) 检查文件状态 并最终准备文件内容以供响应
+http_conn::HTTP_CODE http_conn::do_request(){
+    //复制文档更目录到文件路径
+    strcpy(m_real_file,doc_root);//将服务器的根目录路径复制到m_real_file变量中，作为构建最终文件路径的基础
+    //获取根目录的长度
+    int len=strlen(doc_root);//用于在根目录路径后面正确地拼接具体地文件路径
+    //查找URL中最后一个斜杠
+    const char *p=strrchr(m_url,'/');//p指针指向m_url中最后一个斜杠的位置。
+
+
+    //====================================================      静        态        ===============================================================
+    //检查URL中最后一个斜杠后的字符来决定加载哪个静态页面       如果是 '0'  加载到注册页面 '/register.html'
+    // '1'  加载到登陆页面 '/log.html'              '5'   加载到图片展示页面 '/picture.html'
+    // '6'  加载到视频播放页面 '/video.html'         '7'  加载到粉丝页面 '/fans.html'
+    
+    if(*(p+1)=='0'){
+        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        strcpy(m_url_real,"/register.html");
+        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        free(m_url_real);
+    }else if(*(p+1)=='1'){
+        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        strcpy(m_url_real,"/log.html");
+        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        free(m_url_real);
+    }else if(*(p+1)=='5'){
+        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        strcpy(m_url_real,"/picture.html");
+        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        free(m_url_real);
+    }else if(*(p+1)=='6'){
+        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        strcpy(m_url_real,"/video.html");
+        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        free(m_url_real);
+    }else if(*(p+1)=='7'){
+        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        strcpy(m_url_real,"/fans.html");
+        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        free(m_url_real);
+    }else{
+        strncpy(m_real_file+len,m_url,FILENAME_LEN-len-1);
+    }
+
+
+
+    //======================================================    动       态        =============================================================
+    //处理CGI请求，动态地根据请求类型构造服务端资源路径。通过对URL的解析和路径的动态构建，服务器能够根据用户请求(如登陆或注册)返回相应的动态内容
+    //检查cgi变量是否为1，这表明当前请求需要通过CGI脚本来处理
+    //*(p+1)检查URL中斜杠后第一个字符,'2'通常代表登陆操作，'3'代表注册操作
+    if(cgi==1&&(*(p+1)=='2'||*(p+1)=='3')){
+        //判断是登陆还是注册
+        char flag=m_url[1];
+        //构造真实URL路径
+        char*m_url_real=(char *)malloc(sizeof(char) * 200);//分配一块内存在构造实际的文件路径
+        strcpy(m_url_real,"/");//令'/'为m_url_real的开头第一个字符
+        strcat(m_url_real,m_url+2);//跳过m_url前两个字符，m_url一个字符为'/'，第二个字符为指示操作类型'2'或'3'
+        strncpy(m_real_file+len,m_url_real,FILENAME_LEN-len-1);//将新构造的路径复制到m_real_file中，从doc_root的结尾开始拼接，确保整个文件的路径在预定的长度限制之内
+        free(m_url_real);//释放内存，避免内存泄漏
+
+        //从CGI请求中提取用户提交的表单数据，特别是用户名和密码
+        //提取用户名
+        char name[100],password[100];//用于存储解析出的用户名和密码  
+        int i;
+        //m_string包含从客户端接收到的数据 例如"user=11111&passwd=22222"
+        for(int i=5;m_string[i]!='&';++i){//i从5开始，因为"user="占据了前五个字节
+            name[i-5]=m_string[i];
+        }
+        name[i-5]='\0';//在name的末尾加上'\0'，确保它是一个有效的字符串
+        //提取密码
+        int j=0;
+        for(i=i+7;m_string[i]!='\0';++i,++j){//从找到的字符'&'后加7个字符，因为"passwd="有七个字符
+            password[j]=m_string[i];
+        }
+        password[j]='\0';//在password的末尾加上'\0'，确保它是一共有效的字符串
+
+        //服务器端处理注册请求 包括创建SQL查询以将新用户数据插入数据库，同时检查是否存在重名情况，并根据操作结果更新用户界面
+        if(*(p+1)=='3'){
+            //构建SQL插入语句
+            char *sql_insert=(char *)malloc(sizeof(char) * 200);//为sql_insert分配200字节
+            strcpy(sql_insert,"INSERT INTO user(username,passwd) VALUES(");
+            strcat(sql_insert,"'");
+            strcat(sql_insert,name);
+            strcat(sql_insert,"', '");
+            strcat(sql_insert,password);
+            strcat(sql_insert,"')");//构建了一个完整的SQL插入语句，用于向数据库的用户表('user')中添加新的用户名('username')和密码('passwd')
+            
+            //检查重名并执行SQL
+            if(users.find(name)==users.end()){//检查内存中的用户映射('users')是否已经包含该用户名，如果没有找到，即返回users.end()，表示无重名，可以进行注册
+                m_lock.lock();//确保在修改用户映射和执行数据库操作时线程安全
+                int res=mysql_query(mysql,sql_insert);//mysql_query执行前面构建的SQL插入语句 操作成功返回0
+                users.insert(pair<string,string>(name,password));//把相同的一份name和password也插入服务器内存users中，保持内存数据与数据库MYSQL同步
+                m_lock.unlock();
+
+                //成功把注册用户名和密码插入了MYSQL数据库
+                if(!res){
+                    strcpy(m_url,"/log.html");//跳转到登陆界面
+                }else{
+                    //插入错误
+                    strcpy(m_url,"/registerError.html");
+                }
+            }else{
+                //重名错误
+                strcpy(m_url,"/registerError.html");
+            }
+        }else if(*(p+1)=='2'){//如果是登陆，直接判断。若浏览器端输入的用户名和密码在内存数据库users中能找到，返回1 否则返回0
+            if(users.find(name)!=users.end()&&users[name]==password){
+                strcpy(m_url,"/welcome.html");
+            }else{
+                strcpy(m_url,"/logError.html");
+            }
+        }
+    }
+
+
+    //文件存在性 权限 和类型检查
+    if(stat(m_real_file,&m_file_stat)<0)return NO_RESOURCE;//stat函数用于检验m_real_file是否有效，成功则返回0，并将m_real_file文件信息存储在m_file_stat中,失败返回 -1
+    if(!(m_file_stat.st_mode&S_IROTH))return FORBIDDEN_REQUEST;//文档没有适当的读权限
+    if(S_ISDIR(m_file_stat.st_mode))return BAD_REQUEST;//请求的是一个目录而非文件   
+
+    //打开文件  在确认文件存在且可以访问之后的操作
+    int fd=open(m_real_file,O_RDONLY);//open函数用只读模式('O_RDONLY')打开m_real_file指定的文件。 fd是文件描述符，如果文件成功打开，它将是一个非负的，如果打开是否，fd=-1
+    //内存映射文件内容   mmap()函数将打开的文件内容映射到调用进程的地址空间。这允许文件内容被当作内存中的数据处理，提高文件操作效率
+    //mmap()参数  0：建议内核为映射选择起始地址，内核通常会选择一个合适的地址   m_file_stat.st_size：映射文件的大小   PROT_READ:映射区域的保护方式，设置为可读
+    //MAP_PRIVATE:映射区域的写操作不会写回原文件，而是创建一个写时复制的私有副本   fd：文件描述符，映射哪个文件     0：映射从文件的哪个偏移量开始，这里从文件开始从映射
+    m_file_address=(char *)mmap(0,m_file_stat.st_size,PROT_READ,MAP_PRIVATE,fd,0);
+    //关闭文件描述符
+    close(fd);//打开的文件描述符在完成映射后应该被关闭，因为映射后对文件的操作不再需要通过文件描述符进行
+    //返回状态
+    return FILE_REQUEST;//表示文件请求处理成功，文件已经准备好被发送到客户端   意味着HTTP响应可以直接使用映射的数据来填充响应体
+}
+
+
+//unmap()函数  释放之前通过mmap()函数映射的文件内存区域 确保系统资源得到正确的释放，避免内存泄漏
+void http_conn::unmap(){
+    //检查m_file_address释放存在
+    if(m_file_address){
+        //释放映射的内存  使用munmap()函数释放内存映射 参数 m_file_address:指向映射区域的指针，即mmap()的返回值  m_file_stat.st_size：映射区域的大小，即文件的大小
+        munmap(m_file_address,m_file_stat.st_size);
+        //重置m_file_address
+        m_file_address=0;
+    }
+}
+
+//write()函数 使用非阻塞I/O 和边缘触发模式来高效地发送数据，同时处理部分写和EAGAIN错误(表示套接字缓冲区已满)
+bool http_conn::write(){
+    int temp=0;
+    //初始条件检查
+    if(bytes_to_send==0){
+        //如果没有数据需要发送 bytes_to_send==0 则修改套接字感兴趣地事件为 EPOLLIN(读取事件)，重新初始化连接，准备接收新的数据
+        modfd(m_epollfd,,m_sockfd,EPOLLIN,m_TRIGMode);
+        //重置http_conn对象地状态，准备它来处理下一个新的HTTP请求。在HTTP服务器中，通常同一个连接可以被用来处理多个请求，也就是HTTP/1.1 Keep-alive特性
+        //重置连接状态包括  清空读写缓冲区  重置所有状态变量，如解析状态、头部处理状态等  重新初始化成员变量，准备接收和解析新的请求
+        init();
+        return true;
+    }
+
+    //发送数据循环
+    while(1){
+        //writev()函数 从m_iv指向的多个缓冲区中收集数据并写入到m_sockfd指定的文件(socket)描述符中，m_iv_count指示有多少个缓冲区
+        //返回写入的字节数，如果成功，这个数值应该是所有写入缓冲区的数据总和。如果发生错误，返回-1，并设置errno
+        temp=writev(m_sockfd,m_iv,m_iv_count);
+        //错误处理  表明writev()在尝试写入数据时发生了错误
+        if(temp<0){
+            //处理EAGAIN错误  当errno设置为EAGAIN，这意味着非阻塞socket的写缓冲区已满，当前没有更多空间可用于写入数据，表示现在不能写，稍后再试试
+            if(errno==EAGAIN){
+                //修改文件描述符的感兴趣的事件为EPOLLOUT(可写事件)，当socket缓冲区有空间可写时，epoll会再次通知程序
+                modfd(m_epollfd,m_sockfd,EPOLLOUT,m_TRIGMode);
+                return true;//表示这次写操作尽管未完成，但是连续保持有效，服务器应该等待下一个可写事件再继续写入
+            }
+            //其他写入错误
+            unmap();
+            return false;
+        }
+
+        //更新已发送和待发送的字节计数
+        bytes_have_send+=temp;
+        bytes_to_send-=temp;
+
+        //调整iovec结构  根据已发送的字节量更新iovec结构，以确保下一次writev()调用正确地发送剩余的数据
+        //已发送的字节数超过或等于第一个iovec结构的长度  当bytes_have_send>=m_iv[0].iov_len，说明第一个iovec的数据已经完全发送
+        if(bytes_have_send>=m_iv[0].iov_len){
+            m_iv[0].iov_len=0;//表面第一个iovec中没有剩余数据要发送
+            m_iv[1].iov_base=m_file_address+(bytes_have_send-m_write_idx);//用m_file_address作为基地址加上偏移量(已经发送的总字节数-写缓冲区的起始发送位置)指示在映射文件中的当前位置
+            m_iv[1].iov_len=bytes_to_send;
+        }else{
+            //已发送的字节数小于第一个iovec结构的长度
+            m_iv[0].iov_base=m_write_buf+bytes_have_send;
+            m_iv[0].iov_len=m_iv[0].iov_len-bytes_have_send;
+        }
+
+        //检查是否所有数据都已经发送完毕
+        if(bytes_to_send<=0){
+            unmap();//释放文件映射资源
+            modfd(m_epollfd,m_sockfd,EPOLLIN,m_TRIGMode);//将感兴趣的事件从可写EPOLLOUT改为可读EPOLLIN  表示服务器端现在准备接收来自客户端的进一步数据或新的请求
+
+            //处理连接持久性  m_linger反映了HTTP连接的持久性设置
+            if(m_linger){
+                //表示客户端和服务器均希望保持连接开启，以便客户端可以在同一个连接上发送多个请求。此时调用init()重新初始化连接状态，准备接受新的请求
+                init();
+                return true;
+            }else{
+                //客户端或服务器端期望关闭连接 返回false，调用方应根据这个返回值来关闭socket连接
+                return false;
+            }
+        }
+    }
+}
+
+
+//add_response函数 用于向写缓冲区m_write_buf中添加响应数据 采用可变参数列表来格式化输出
+bool http_conn::add_response(const char *format,...){
+    //检查缓冲区空间
+    if(m_write_idx>=WRITE_BUFFER_SIZE){
+        return false;
+    }
+
+    //初始化可变参数列表
+    va_list arg_list;//定义了一个va_list类型的变量arg_list来存储可变参数
+    va_start(arg_list,format);//va_start函数初始化arg_list，使其指向可变参数列表中的第一个参数
+
+    //格式化字符串并写入缓冲区   使用vsnprintf函数将格式化后的字符串写入m_write_buf中当前m_write_idx指向的位置
+    //WRITE_BUFFER_SIZE-1-m_write_idx：计算的是缓冲区剩余的空间大小，'-1'保留一个字符的空间用于字符串的终止符'\0'
+    int len=vsnprintf(m_write_buf+m_write_idx,WRITE_BUFFER_SIZE-1-m_write_idx,format,arg_list);
+    //如果len大于或等于可用空间，说明写缓冲区空间不足以存储格式化后的字符串
+    if(len>=(WRITE_BUFFER_SIZE-1-m_write_idx)){
+        va_end(arg_list);
+        return false;
+    }
+
+    //更新写索引
+    m_write_idx+=len;
+    //结束可变参数列表的使用
+    va_end(arg_list);
+    //记录日志
+    LOG_INFO("request:%s",m_write_buf);
+    //返回true 表示响应内容成功添加到缓冲区
+    return true;
+}
+
+
+//HTTP响应格式                     协议版本  空格   状态码  空格  状态码描述   回车符  换行符 ---------->状态行
+//                                 头部字段名   :   值    回车符   换行符 ------------|
+//                                 头部字段名   :   值    回车符   换行符 ------------|----->响应头 
+//                                 头部字段名   :   值    回车符   换行符 ------------| 
+//                                 回车符  换行符    --------------------------------->空行
+//                                 XXXXXXXXXXXXXXXXXXXXXXXX-------------------------->响应正文
+
+//构建HTTP响应行
+bool http_conn::add_status_line(int status,const char *title){
+    return add_response("%s %d %s\r\n","HTTP/1.1",status,title);//示例输出：'HTTP/1.1 200 OK\r\n'
+}
+//构建HTTP响应头
+bool http_conn::add_headers(int content_len){
+    //包括内容长度  连接保持状态 和一个空白行，用于分割头部和主题
+    return add_content_length(content_len)&&add_linger()&&add_blank_line();
+}
+//向响应头中加入Content-length 指示响应主体的字节长度
+bool http_conn::add_content_length(int content_len){
+    return add_response("Content-Length:%d\r\n",content_len);//示例输出：'Content-Length:1234\r\n'
+}
+//向响应头中加入Content-Type头部 设置为 'text/html'
+bool http_conn::add_content_type(){
+    return add_response("Content-Type:%s\r\n","text/html");//示例输出：'Content-Type:text/html'
+}
+//向响应头中加入Connection头部 根据m_linger的值决定是否保持连接
+bool http_conn::add_linger(){
+    return add_response("Connection:%s\r\n",(m_linger==true)?"Keep-alive":"close");//示例输出'Connection:Keep-alive'
+}
+//加空白行
+bool http_conn::add_blank_line(){
+    return add_response("%s","\r\n");
+}
+//将具体的响应主体内容加到缓冲区
+bool http_conn::add_content(const char *content){
+    return add_response("%s",content);
+}
+
+//基于不同的HTTP请求处理结果构建适当的响应
+bool http_conn::process_write(HTTP_CODE ret){
+    switch(ret){
+        //处理内部错误
+        case INTERNAL_ERROR:{
+            add_status_line(500,error_500_title);
+            add_headers(strlen(error_500_form));
+            if(!add_content(error_500_form))return false;//如果添加内容失败，返回false
+            break;
+        }
+        //处理错误请求
+        case BAD_REQUEST:{
+            add_status_line(404,error_404_title);
+            add_headers(strlen(error_404_form));
+            if(!add_content(error_404_form))return false;
+            break;
+        }
+        //处理禁止错误
+        case FORBIDDEN_REQUEST:{
+            add_status_line(403,error_403_title);
+            add_headers(strlen(error_403_form));
+            if(!add_content(error_403_form))return false;
+            break;
+        }
+        //处理文件请求
+        case FILE_REQUEST:{
+            add_status_line(200,ok_200_title);
+            //处理非空文件
+            if(m_file_stat.st_size!=0){
+                //添加头部
+                add_headers(m_file_stat.st_size);
+                //设置iovec结构
+                m_iv[0].iov_base=m_write_buf;//m_iv[0]被指向m_write_buf中累计的响应头部
+                m_iv[0].iov_len=m_write_idx;//长度为写缓冲区有多少数据
+                m_iv[1].iov_base=m_file_address;//m_iv[1]被指向m_file_address处内存映射的实际文件数据
+                m_iv[1].iov_len=m_file_stat.st_size;//长度为文件的整体大小
+                m_iv_count=2;//表示有两块数据要发送：头部和文件内容
+                bytes_to_send=m_write_idx+m_file_stat.st_size;//计算  头部长度+文件大小
+                return true;
+            }{
+                //处理空文件
+                const char *ok_string="<html><body></body></html>";//服务器生成一个简单的HTML页面作为响应
+                add_headers(strlen(ok_string));
+                if(!add_content(ok_string))return false;
+            }
+        }
+        //其他情况
+        default:
+            return false;
+    }
+    //在处理完特定的响应后，此部分代码将最终准备发送的数据定位在m_write_buf中      设置iovec结构和发送数据
+    m_iv[0].iov_base=m_write_buf;
+    m_iv[0].iov_len=m_write_idx;
+    m_iv_count=1;
+    bytes_to_send=m_write_idx;
+    return true;
+}
