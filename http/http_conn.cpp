@@ -762,7 +762,7 @@ bool http_conn::process_write(HTTP_CODE ret){
                 m_iv_count=2;//表示有两块数据要发送：头部和文件内容
                 bytes_to_send=m_write_idx+m_file_stat.st_size;//计算  头部长度+文件大小
                 return true;
-            }{
+            }else{
                 //处理空文件
                 const char *ok_string="<html><body></body></html>";//服务器生成一个简单的HTML页面作为响应
                 add_headers(strlen(ok_string));
@@ -779,4 +779,25 @@ bool http_conn::process_write(HTTP_CODE ret){
     m_iv_count=1;
     bytes_to_send=m_write_idx;
     return true;
+}
+
+//process()函数  负责整个请求处理的流程，包括读取请求 处理请求并准备响应  以及根据读写结果调整socket的状态  通过epoll事件驱动来高效处理并发的网络连接
+void http_conn::process(){
+    //读取请求并处理
+    HTTP_CODE read_ret=process_read();
+    //判断读取结果
+    if(read_ret==NO_REQUEST){
+        //请求数据不完整或需要更多数据才能完成解析
+        modfd(m_epollfd,m_sockfd,EPOOLIN,m_TRIGMode);//重新设置socket为EPOLLIN状态，即告诉epoll再次等待该socket的读事件
+        return;
+    }
+    //处理响应写入
+    //一但请求被完全读取和解析，process_write根据解析生成HTTP响应   process_write返回true 代表响应已经成功准备(即数据已经正确放入发送缓冲区)
+    bool write_ret=process_write(read_ret);
+    //处理写入结果
+    if(!write_ret){
+        close_conn();//响应失败，可能是由于内部错误或资源问题  关闭当前连接，释放相关资源
+    }
+    //调整socket为可写状态
+    modfd(m_epollfd,m_sockfd,EPOLLOUT,m_TRIGMode);//不管写入成功与否，都将socket设置为EPOLLOUT状态  这表示socket现在应该准备好写入数据到网络中
 }
