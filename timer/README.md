@@ -57,3 +57,70 @@ void cb_func(client_data *user_data)：cb_func是一个回调函数，由util_ti
 3 定时器和回调的执行
 >* 在timer_handler中，会调用sort_timer_lst的tick()方法，后者遍历定时器列表，检查并触发到期的定时器
 >* 当定时器到期时，util_timer实例的cb_func被调用，传入与定时器关联的client_data，以执行具体的业务逻辑
+
+============================
+回调函数：本质上是一个通过函数指针调用的函数。可以将一个函数的地址(指针)传递给另一个函数，参数为一个函数的指针的函数可以在适当的时候调用这个通过指针指定的函数(就是参数)
+在util_timer结构体中有一个成员 void (*cb_func)(client_data *)。这是一个函数指针，它指向一个接受 client_data类型参数的函数。当定时器到期时，通过这个函数指针调用相应的函数，
+处理与该定时器相关的特定任务
+
+示例：
+ 一个用于处理网络超时的函数
+    void handle_timeout(client_data *data){
+        close(data->sockfd);//关闭连接，记录日志等操作
+        std::cout<<"Connection timed out for socket"<<data->sockfd<<std::endl;
+    }
+在设置定时器时，可以指定调回函数
+util_timer *timer= new util_timer();
+timer->cb_func=handle_timeout;
+timer->user_data=&some_client_data;
+
+当定时器到期并且tick方法被调用时，如果发现timer到期，它将调用handle_timeout,传递some_client_data作为参数
+
+
+
+========================================
+send函数：用于发送数据到指定的socket，可以用于任何类型的文件描述符 如管道
+ssize_t send(int sockfd, const void *buf, size_t len, int flags);
+参数解释：
+>* sockfd:发送数据的文件描述符
+>* buf:指向包含待发送数据的缓冲区的指针
+>* len:要发送的数据字节数
+>* falgs:控制发送行为的各种标志 例如MSG_DONTWAIT非阻塞发送
+
+read函数：用于从文件描述符中读取数据
+ssize_t read(int fd, void *buf, size_t count);
+参数解释：
+>* fd:要读取数据的文件描述符
+>* buf:指向缓冲区的指针，用于存放读取的数据
+>* count:要读取的最大字节数
+
+=========================================
+管道：用于进程间通信的方法，运行一个进程的输出直接成为另一个进程的输入，通常有两个文件描述符
+>* u_pipefd[0]:用于读取管道的内容，这是管道的读端
+>* u_pipefd[1]:用于向管道写入内容，这是管道的写端；
+
+==================================
+sigaction函数 用于检查或修改信号处理方式的Unix系统调用
+int sigaction(int signum,const struct sigaction *act, struct sigaction *oldact);  成功返回0  失败返回-1 并设置errno
+参数解释：
+>* signum:要操作的信号编号 如 SIGINT 或 SIGTERM
+>* act:指向sigaction结构体的指针，该结构体指定了新的信号处理方式
+>* oldact:用于保存旧的信号处理方式的sigaction结构体
+
+sigaction结构体包含
+>* sa_handler:是一个函数指针，指向信号处理函数
+>* sa_mask:是一个信号集，指定在处理该信号时哪些信号应该被阻塞
+>* sa_flags:用于指定信号处理的各种选项，如 SA_RESTART
+
+
+sigfillset函数 用于初始化信号集，使其包含所有已定义的信号的函数
+int sigfillset(sigset_t *set);  成功返回0   失败返回-1
+参数解释：
+>* set:指向sigset_t数据结构的指针，该结构代表一个信号集
+
+
+assert 用于在运行时进行断言检查的宏   
+==================================
+alarm函数 用于设置一个定时器，该定时器在指定的秒数后将SIGALRM信号发送给当前进程。如果定时器到期前再次调用 alarm，任何之前的定时器都会被新的调用所取代
+unsigned int alarm(unsigned int seconds);  返回之前设置的定时器的剩余时间(如果有的话),单位是秒
+seconds :定时器触发前等待的时间，单位为秒
