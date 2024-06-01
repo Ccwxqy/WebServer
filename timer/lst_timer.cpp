@@ -193,4 +193,14 @@ void Utils::show_error(int connfd,const char *info){
 
 //Utils静态成员变量初始化
 int *Utils::u_pipefd=0;
-int *Utils::u_epollfd=0;
+int Utils::u_epollfd=0;
+
+class Utils;//声明Utils类
+
+//cb_func 回调函数 负责从epoll监控中移除对应得socket文件描述符，并关闭连接 同时也处理与连接相关的一些应用状态，如减少用户计数器
+void cb_func(client_data *user_data){
+    epoll_ctl(Utils::u_epollfd,EPOLL_CTL_DEL,user_data->sockfd,0);//从epoll实例中移除socket文件描述符
+    assert(user_data);//断言以确保user_data指针不为空  如果user_data为nullptr，assert将导致程序中断，有助于早期发现问题
+    close(user_data->sockfd);//关闭socket文件描述符
+    http_conn::m_user_count--;//减少应用层维护的用户计数
+}
