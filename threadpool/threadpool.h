@@ -43,7 +43,7 @@ class threadpool{
 
 //模板类构造函数实现
 template<typename T>//初始化列表
-threadpool<T>::threadpool(int actor_model,connection_pool *connPool,int thread_number,int max_requests):m_actor_model(actor_model),m_thread_number(thread_number),m_max_requests(max_requests),mthreads(nullptr),m_connPool(connPool){
+threadpool<T>::threadpool(int actor_model,connection_pool *connPool,int thread_number,int max_requests):m_actor_model(actor_model),m_thread_number(thread_number),m_max_requests(max_requests),m_threads(nullptr),m_connPool(connPool){
     //参数验证
     if(thread_number<=0||max_requests<=0){
         throw std::exception();//抛出异常

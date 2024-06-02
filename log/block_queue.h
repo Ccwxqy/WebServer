@@ -156,7 +156,7 @@ class block_queue{
         bool pop(T &item){
             m_mutex.lock();
             //等待条件满足
-            whlie(m_size<=0){//如果队列没有元素，那就一直等待，直到队列中有元素可供pop
+            while(m_size<=0){//如果队列没有元素，那就一直等待，直到队列中有元素可供pop
                 //调用 wait 方法等待条件变量被触发(即队列中有元素被添加) m_size>0 退出循环
                 //如果等待失败，则解锁互斥锁并返回false
                 if(!m_cond.wait(m_mutex.get())){
