@@ -276,9 +276,126 @@ void webserver::dealwithread(int sockfd){
     //通用操作  获取与指定套接字关联的定时器
     util_timer *timer=users_timer[sockfd].timer;
 
-    //Reactor模型  m_actormodel=1 服务器使用Reactor模型  
+    //Reactor模型  m_actormodel=1 服务器使用Reactor模型   
     if(m_actormodel==1){
         //检查并调整定时器  如果存在，更新定时器的超时时间，反应该连接仍然活跃，防止在处理请求时连接被错误地关闭
-        adjust_timer(timer);
+        if(timer){
+            adjust_timer(timer);
+        }  
+        //将读事件放入请求队列
+        m_pool->append(users+sockfd,0);//将指定的连接users[sockfd]加入到线程池m_pool的任务队列中
+        //处理改进标记和定时器标志
+        while(true){
+            //循环检查improv标志 这个标志指示是否有改进(如数据处理完毕或状态更新)
+            if(users[sockfd].improv==1){
+                //http_conn对象是否设置了time_flag标志
+                if(users[sockfd].timer_flag==1){
+                    deal_timer(timer,sockfd);
+                    users[sockfd].timer_flag=0;
+                }
+                //清除improv标志并退出循环
+                users[sockfd].improv=0;
+                break;
+            }
+        }
+    }else{
+        //Proactor  主线程负责完成I/O操作(如数据读取)，并将数据处理的任务(如解析和相应构建)委托给工作线程
+        //尝试读取数据
+        if(users[sockfd].read_once()){
+            //如果成功读取到数据，记录日志，显示客户端的IP地址
+            LOG_INFO("deal with the client(%s)",inet_ntoa(users[sockfd].get_address()->sin_addr));
+            //将读事件放入请求队列
+            m_pool->append_p(users+sockfd);//涉及请求的进一步解析和处理，如HTTP请求解析 数据库查询 响应生成等
+            //调整连接的定时器
+            if(timer){
+                adjust_timer(timer);//反应该连接仍然活跃
+            }
+        }else{
+            //主线程读取失败
+            deal_timer(timer,sockfd);//处理定时器(可能涉及到关闭连接等操作)
+        }
+    }
+}
+
+//dealwithwrite 负责向客户端发送数据 并根据操作的结构更新定时器或进行必要的错误处理
+void webserver::dealwithwrite(int sockfd){
+    //通用操作
+    util_timer *timer=users_timer[sockfd].timer;
+    //Reactor模型  主线程不直接执行写操作 而是将其委托给工作线程处理
+    if(m_actormodel==1){
+        if(timer)adjust_timer(timer);
+        m_pool->append(users+sockfd,1);
+        while (true)
+        {
+            if(users[sockfd].improv==1){
+                if(users[sockfd].timer_flag==1){
+                    deal_timer(timer,sockfd);
+                    users[sockfd].timer_flag=0;
+                }
+                users[sockfd].improv=0;
+                break;
+            }
+        }
+    }else{
+        //Proactor
+        if(users[sockfd].write()){
+            LOG_INFO("send data to the client(%s)",inet_ntoa(users[sockfd].get_address()->sin_addr));
+            if(timer)adjust_timer(timer);
+        }else{
+            deal_timer(timer,sockfd);
+        }
+    }
+}
+
+//eventLoop 负责处理所有的网络事件，包括新的客户端连接 数据读写 信号处理以及定时器事件
+void webserver::eventLoop(){
+    //初始化标志
+    bool timeout=false;//用于标记定时任务是否需要执行
+    bool stop_server=false;//用于控制服务器是否停止运行的标志
+    //主循环  直到stop_server被设置为true
+    while(!stop_server){ 
+        //等待事件发生   epoll_wait 监听事件 -1表示无超时(永久等待)，直到事件发生   
+        int number=epoll_wait(m_epollfd,events,MAX_EVENT_NUMBER,-1);
+        //返回错误且错误不是由中断引起(EINTR)，记录错误并退出循环
+        if(number<0&&errno!=EINTR){
+            LOG_ERROR("%s","epoll failure");
+            break;
+        }
+        //遍历事件  根据文件描述符和事件类型进行处理
+        for(int i=0;i<number;i++){
+            int sockfd=events[i].data.fd;
+            //处理新的客户端连接
+            if(sockfd==m_listenfd){
+                bool flag=dealclientdata();//接受连接和初始化新的客户端会话
+                //处理失败，返回flag=false,跳过当前循环迭代，继续下一个事件
+                if(flag==false)continue;
+            }
+            //处理异常事件
+            else if(events[i].events & (EPOLLRDHUP|EPOLLHUP|EPOLLERR)){
+                //服务器端关闭连接，移除对应的定时器
+                util_timer *timer=users_timer[sockfd].timer;
+                deal_timer(timer,sockfd);
+            }
+            //处理信号    事件发生在管道的读端(m_pipefd[0]用于信号通知)，并且是读事件，处理接收到的信号
+            else if((sockfd==m_pipefd[0])&&(events[i].events & EPOLLIN)){
+                bool flag=dealwithsignal(timeout,stop_server);
+                if(flag==false)LOG_ERROR("%s",dealclientdata failure);
+            }
+            //处理数据读取事件
+            else if(events[i].events*EPOLLIN){
+                dealwithread(sockfd);
+            }
+            //处理数据写入事件
+            else if(events[i].events&EPOLLOUT){
+                dealwithwrite(sockfd);
+            }
+        }
+
+        //定期执行任务
+        if(timeout){
+            utils.timer_handler();
+            LOG_INFO("%s","timer tick");
+            timeout=false;
+        }
     }
 }
