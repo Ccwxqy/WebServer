@@ -183,5 +183,5 @@ class http_conn{
         //配置于日志
         int m_TRIGMode;//用于控制epoll触发模式
         int m_close_log;//是否关闭日志记录
-}
+};
 #endif

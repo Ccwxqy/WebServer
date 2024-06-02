@@ -18,7 +18,7 @@ class threadpool{
         ~threadpool();
         //向工作队列中添加任务
         bool append(T *request,int state);//添加带有特定状态的任务
-        bool append_p(T *request)//添加优先任务 或特殊处理的任务
+        bool append_p(T *request);//添加优先任务 或特殊处理的任务
 
     private:
         //工作线程运行的函数，它不断从工作队列中取出任务并执行
@@ -35,7 +35,7 @@ class threadpool{
         std::list<T *>m_workqueue;//请求队列
         locker m_queuelocker;//保护请求队列的互斥锁
         sem m_queuestat;//是否有任务需要处理
-        connection_pool *m_connPool//数据库
+        connection_pool *m_connPool;//数据库
         int m_actor_model;//模型切换
 
 };
@@ -43,7 +43,7 @@ class threadpool{
 
 //模板类构造函数实现
 template<typename T>//初始化列表
-threadpool<T>::threadpool(int act_model,connection_pool *connPool,int thread_number,int max_requests):m_actor_model(actor_model),m_thread_number(thread_number),m_max_requests(max_requests),mthreads(nullptr),m_connPool(connPool){
+threadpool<T>::threadpool(int actor_model,connection_pool *connPool,int thread_number,int max_requests):m_actor_model(actor_model),m_thread_number(thread_number),m_max_requests(max_requests),mthreads(nullptr),m_connPool(connPool){
     //参数验证
     if(thread_number<=0||max_requests<=0){
         throw std::exception();//抛出异常
