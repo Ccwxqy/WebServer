@@ -180,7 +180,7 @@ void webserver::adjust_timer(util_timer *timer){
     time_t cur=time(nullptr);
     timer->expire=cur + 3 * TIMESLOT;//设置定时器的新超时时间 从而允许连接在更长时间内保持活跃状态
     //调整定时器在链表中的位置
-    utils.m_timer_lst.add_timer(timer);
+    utils.m_timer_lst.adjust_timer(timer);
     //记录日志
     LOG_INFO("%s","adjust timer once");
 }
@@ -194,7 +194,7 @@ void webserver::deal_timer(util_timer *timer,int sockfd){
         utils.m_timer_lst.del_timer(timer);
     }
     //记录日志
-    LOG_INFO("close fd &d",users_timer[sockfd].sockfd);
+    LOG_INFO("close fd %d",users_timer[sockfd].sockfd);
 }
 
 //dealclientdata 处理新的客户端连接请求  根据m_LISTENTrigmode(监听套接字的触发模式)不同，采取不同的处理方式
@@ -383,11 +383,11 @@ void webserver::eventLoop(){
                 if(flag==false)LOG_ERROR("%s","dealclientdata failure");
             }
             //处理数据读取事件
-            else if(events[i].events*EPOLLIN){
+            else if(events[i].events & EPOLLIN){
                 dealwithread(sockfd);
             }
             //处理数据写入事件
-            else if(events[i].events&EPOLLOUT){
+            else if(events[i].events & EPOLLOUT){
                 dealwithwrite(sockfd);
             }
         }
