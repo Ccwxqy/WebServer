@@ -173,7 +173,7 @@ void Utils::addsig(int sig, void(handler)(int),bool restart){
     memset(&sa,'\0',sizeof(sa));//初始化sigaction结构体为零
     sa.sa_handler=handler;//设置信号处理函数
     if(restart)sa.sa_flags|=SA_RESTART;//设置SA_RESTART标志
-    sigfillset(&ss.sa_mask);//在sa_mask中填充所有信号，阻塞所有信号处理过程中的其他信号
+    sigfillset(&sa.sa_mask);//在sa_mask中填充所有信号，阻塞所有信号处理过程中的其他信号
     assert(sigaction(sig,&sa,nullptr)!=-1);//设置信号sig的处理方式，断言不失败
 }
 

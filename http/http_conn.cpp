@@ -595,7 +595,7 @@ bool http_conn::write(){
     //初始条件检查
     if(bytes_to_send==0){
         //如果没有数据需要发送 bytes_to_send==0 则修改套接字感兴趣地事件为 EPOLLIN(读取事件)，重新初始化连接，准备接收新的数据
-        modfd(m_epollfd,,m_sockfd,EPOLLIN,m_TRIGMode);
+        modfd(m_epollfd,m_sockfd,EPOLLIN,m_TRIGMode);
         //重置http_conn对象地状态，准备它来处理下一个新的HTTP请求。在HTTP服务器中，通常同一个连接可以被用来处理多个请求，也就是HTTP/1.1 Keep-alive特性
         //重置连接状态包括  清空读写缓冲区  重置所有状态变量，如解析状态、头部处理状态等  重新初始化成员变量，准备接收和解析新的请求
         init();

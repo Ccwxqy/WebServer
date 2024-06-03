@@ -379,7 +379,7 @@ void webserver::eventLoop(){
             //处理信号    事件发生在管道的读端(m_pipefd[0]用于信号通知)，并且是读事件，处理接收到的信号
             else if((sockfd==m_pipefd[0])&&(events[i].events & EPOLLIN)){
                 bool flag=dealwithsignal(timeout,stop_server);
-                if(flag==false)LOG_ERROR("%s",dealclientdata failure);
+                if(flag==false)LOG_ERROR("%s","dealclientdata failure");
             }
             //处理数据读取事件
             else if(events[i].events*EPOLLIN){
