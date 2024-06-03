@@ -7,7 +7,7 @@
 const char *ok_200_title="OK";//请求成功被服务器接收 理解 并处理
 //客户端错误响应
 const char *error_400_title="Bad Request";//请求语法错误 或请求有误
-const char *error_400_form="Your request has bad syntax or is inherently impossible to statisfy.\n";//请求错误 提供更具体的错误信息
+const char *error_400_form="Your request has bad syntax or is inherently impossible to staisfy.\n";//请求错误 提供更具体的错误信息
 const char *error_403_title="Forbidden";//服务器理解客户端的请求 但拒绝执行此请求
 const char *error_403_form="You do not have permission to get file form this server.\n";//更具体地说明客户端权限不足 被禁止访问服务器
 const char *error_404_title="Not Found";//请求的资源未在服务器上被找到
@@ -355,7 +355,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text){
         //Connection头处理
         text+=11;
         text+=strspn(text," \t");//text指向了 Connection:之后 值 的开始部分(跳过可能存在的TAB键或空格)
-        if(strncasecmp(text,"Keep-alive",10)==0){
+        if(strcasecmp(text,"Keep-alive")==0){
             m_linger=true;//保持连接
         }
     }else if(strncasecmp(text,"Content-length:",15)==0){
