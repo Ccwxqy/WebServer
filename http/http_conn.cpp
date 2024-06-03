@@ -317,13 +317,13 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text){
     if(strcasecmp(m_version,"HTTP/1.1")!=0)return BAD_REQUEST;//只支持HTTP/1.1版本
 
     //处理URL   如果url是以 'http://' 或'https://'开头，跳过这些协议标记，并将URL调整为从第一个'/'开始的路径部分 
-    if(strcasecmp(m_url,"http://",7)==0){
+    if(strncasecmp(m_url,"http://",7)==0){
         m_url+=7;
-        m_url=strstr(m_url,'/');//确保调整后的url是以'/'开头，否则返回错误
+        m_url=strchr(m_url,'/');//确保调整后的url是以'/'开头，否则返回错误
     }
-    if(strcasecmp(m_url,"https://",8)==0){
+    if(strncasecmp(m_url,"https://",8)==0){
         m_url+=8;
-        m_url=strstr(m_url,'/');
+        m_url=strchr(m_url,'/');
     }
     if(!m_url||m_url[0]!='/'){
         return BAD_REQUEST;
@@ -351,19 +351,19 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text){
         }
         return GET_REQUEST;//如果没有请求体，请求头已经完全解析完成，返回GET_REQUEST表示GET请求可以被处理   
         //解析具体头部字段
-    }else if(strcasecmp(text,"Connection:",11)==0){
+    }else if(strncasecmp(text,"Connection:",11)==0){
         //Connection头处理
         text+=11;
         text+=strspn(text," \t");//text指向了 Connection:之后 值 的开始部分(跳过可能存在的TAB键或空格)
-        if(strcasecmp(text,"Keep-alive")==0){
+        if(strncasecmp(text,"Keep-alive",10)==0){
             m_linger=true;//保持连接
         }
-    }else if(strcasecmp(text,"Content-length:",15)==0){
+    }else if(strncasecmp(text,"Content-length:",15)==0){
         //获取请求的内容长度
         text+=15;
         text+=strspn(text," \t");
         m_content_length=atol(text);//提取并转换Content-length的值，存储在m_content_length中
-    }else if(strcasecmp(text,"Host:",5)==0){
+    }else if(strncasecmp(text,"Host:",5)==0){
         //解析请求头中的 Host
         text+=5;
         text+=strspn(text," \t");
@@ -788,7 +788,7 @@ void http_conn::process(){
     //判断读取结果
     if(read_ret==NO_REQUEST){
         //请求数据不完整或需要更多数据才能完成解析
-        modfd(m_epollfd,m_sockfd,EPOOLIN,m_TRIGMode);//重新设置socket为EPOLLIN状态，即告诉epoll再次等待该socket的读事件
+        modfd(m_epollfd,m_sockfd,EPOLLIN,m_TRIGMode);//重新设置socket为EPOLLIN状态，即告诉epoll再次等待该socket的读事件
         return;
     }
     //处理响应写入

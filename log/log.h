@@ -41,6 +41,7 @@ class Log{
         //在多线程的上下文中，线程启动函数必须有一个返回类型为 void* 并接受一个 void* 参数的签名。 这允许线程函数接受一个指向任何数据类型的指针，从而提供了很大的灵活性
         static void *flush_log_thread(void *args){
             Log::get_instance()->async_write_log();
+            return nullptr;
         }
         //初始化日志系统 可以指定日志文件名 是否关闭日志 日志缓冲区大小 文件分割的最大行数 日志队列的最大大小
         bool init(const char *file_name,int close_log,int log_buf_size=8192,int split_lines=5000000,int max_queue_size=0);
@@ -74,6 +75,7 @@ class Log{
                 fputs(single_log.c_str(),m_fp);
                 m_mutex.unlock();//解锁 允许其他线程访问和修改文件
             }
+            return nullptr;
         }
 };
 //宏定义  针对不同的日志级别快速地写入日志消息 

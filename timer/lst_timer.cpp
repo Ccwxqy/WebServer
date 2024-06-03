@@ -155,7 +155,7 @@ void Utils::addfd(int epollfd,int fd,bool one_shot,int TRIGMode){
     }
 
     if(one_shot)event.events|=EPOLLONESHOT;//如果指定one_shot，添加EPOLLONESHOT到事件类型中
-    epoll_ctl(epollfd,EPOLL_CTL_ADD,&event);//注册fd到epollfd指定的epoll实例
+    epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&event);//注册fd到epollfd指定的epoll实例
     setnonblocking(fd);//设置fd为非阻塞模式
 }
 

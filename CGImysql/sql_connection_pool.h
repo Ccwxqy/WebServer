@@ -41,7 +41,7 @@ class connection_pool{
         string m_User;//登陆数据库用户名
         string m_PassWord;//登陆数据库密码
         string m_DatabaseName;//使用数据库名
-        int m_colse_log;//日志开关
+        int m_close_log;//日志开关
 };
 
 class connectionRAII{

@@ -59,7 +59,7 @@ class webserver{
     public:
         webserver();
         ~webserver();
-        void init(int port, string passWord, string databaseName,                  
+        void init(int port, string users,string passWord, string databaseName,                  
                     int log_write, int opt_linger, int trigmode,
                     int sql_num, int thread_num, int close_log ,int actor_model); //初始化服务器的基本设置，包括端口号 数据库登陆凭证 日志设置 连接模式等
         void thread_pool();//初始化或管理线程池  涉及创建线程 分配任务给线程操作

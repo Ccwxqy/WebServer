@@ -26,7 +26,7 @@ void connection_pool::init(string url,string User,string PassWord,string DBName,
     m_User=User;
     m_PassWord=PassWord;
     m_Port=Port;
-    m_colse_log=close_log;
+    m_close_log=close_log;
     m_DatabaseName=DBName;
 
 //创建数据库连接池

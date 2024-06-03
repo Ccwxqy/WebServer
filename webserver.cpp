@@ -83,7 +83,7 @@ void webserver::log_write(){
 //sql_pool 初始化和配置数据库连接池 以及初始化用户数据
 void webserver::sql_pool(){
     //初始化数据库连接池   调用connection_pool类的单例方法GetConnection来获取数据库连接池的唯一实例  单例模式确保整个应用程序中只有一个数据库连接池实例，有助于统一管理数据库连接
-    m_connPool=connection_pool::GetConnection();
+    m_connPool=connection_pool::GetInstance();
     m_connPool->init("localhost",m_user,m_passWord,m_databaseName,3306,m_sql_num,m_close_log);
     //初始化数据库读取表
     users->initmysql_result(m_connPool);
@@ -129,9 +129,10 @@ void webserver::eventListen(){
     assert(ret>=0);//再次确认监听是否成功设置
 
     //初始化工具类并设置定时器
-    utils.init(TIMESLOT);/
+    utils.init(TIMESLOT);
 
     //创建和设置epoll事件监听
+    epoll_event events[MAX_EVENT_NUMBER];
     m_epollfd=epoll_create(5);
     assert(m_epollfd!=-1);
     utils.addfd(m_epollfd,m_listenfd,false,m_LISTENTrigmode);
@@ -240,7 +241,7 @@ bool webserver::dealclientdata(){
 
 //dealwithsignal 处理通过管道接收到的信号  信号是由另一个线程或信号处理函数发送到 m_pipefd[0](管道的读端),然后在这个函数中被接收和处理
 bool webserver::dealwithsignal(bool &timeout,bool &stop_server){
-    int ret=0
+    int ret=0;
     int sig;
     char signals[1024];
     //接收信号  使用recv函数从管道的读端m_pipefd[0]读取信号数据。信号数据被存储在signals数组中，这个数组可以存储多个信号值  ret表示接收到的字节个数 每个信号标识符通常是一个字节 

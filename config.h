@@ -24,7 +24,7 @@ class Config{
     //成员函数
     public:
         Config();
-        ~Config();
+        ~Config(){};
         void parse_arg(int argc, char* argv[]);//负责解析命令行参数，将参数值设置到相应的成员变量中
 };
 #endif
