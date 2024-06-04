@@ -3,6 +3,17 @@ A tiny web server project following a GitHub tutorial
 
 This project is a personal learning exercise based on the original project by [qingguoyi](https://github.com/qinguoyi/TinyWebServer)
 
+作为C++入门级项目，Webserver涵盖知识面广，对于新手的我来说也比较容易一些。本项目是自己跟着原作者代码一步一步实现的。唯一不同在于本人在学习原博主项目代码时，
+分别对每行代码进行了注释，一是强化自己的理解，二是方便后续对项目所设计知识点可以更好回顾。唯一没有手敲的是root下的一些前端html页面设计(能看懂html格式就好)。
+在运行原博主代码时，log.cpp函数可能会出现字符溢出的现象(不代表所有人，我在运行原博主的代码时是提示log.cpp文件有报错)，所以我对于log.cpp文件，我在log文件夹
+下多加了一个maybelog.cpp文件，在遇到错误时将原log.cpp文件替换为maybelog.cpp文件，即可执行。
+
+项目快速运行在本README.md文件最后
+
+以此项目为基础，正式开启码农生活！愿大家都成功！  
+
+
+
 ## License
 This project is licensed under the Apache License 2.0 See the [LICENSE](./LICENSE) file for details.
 
@@ -47,3 +58,63 @@ int setsockopt(int socket,int level, int option_name, const void *option_value, 
 >* option_name:想要访问的选项名 例如SO_LINGER是一种选项，用来控制套接字关闭的行为
 >* option_value:指向包含新选项值的缓冲区的指针
 >* option_len：传入的选项值的大小
+
+
+
+
+
+
+快速运行
+------------
+* 服务器测试环境
+	* Ubuntu版本16.04
+	* MySQL版本5.7.29
+* 浏览器测试环境
+	* Windows、Linux均可
+	* Chrome
+	* FireFox
+
+* 测试前确认已安装MySQL数据库
+
+    ```C++
+    // 建立yourdb库
+    create database yourdb;
+
+    // 创建user表
+    USE yourdb;
+    CREATE TABLE user(
+        username char(50) NULL,
+        passwd char(50) NULL
+    )ENGINE=InnoDB;
+
+    // 添加数据
+    INSERT INTO user(username, passwd) VALUES('name', 'passwd');
+    ```
+
+* 修改main.cpp中的数据库初始化信息
+
+    ```C++
+    //数据库登录名,密码,库名
+    string user = "root";
+    string passwd = "root";
+    string databasename = "yourdb";
+    ```
+
+* build
+
+    ```C++
+    sh ./build.sh
+    ```
+
+* 启动server
+
+    ```C++
+    ./server
+    ```
+
+* 浏览器端
+
+    ```C++
+    ip:9006
+    ```
+
