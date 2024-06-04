@@ -455,20 +455,101 @@ http_conn::HTTP_CODE http_conn::do_request(){
     const char *p=strrchr(m_url,'/');//p指针指向m_url中最后一个斜杠的位置。
 
 
+
+
+
+    //======================================================    动       态        =============================================================
+    //处理CGI请求，动态地根据请求类型构造服务端资源路径。通过对URL的解析和路径的动态构建，服务器能够根据用户请求(如登陆或注册)返回相应的动态内容
+    //检查cgi变量是否为1，这表明当前请求需要通过CGI脚本来处理
+    //*(p+1)检查URL中斜杠后第一个字符,'2'通常代表登陆操作，'3'代表注册操作
+    if(cgi==1&&(*(p+1)=='2'||*(p+1)=='3')){
+        //判断是登陆还是注册
+        char flag=m_url[1];
+        //构造真实URL路径
+        char *m_url_real=(char *)malloc(sizeof(char) * 200);//分配一块内存在构造实际的文件路径
+        strcpy(m_url_real,"/");//令'/'为m_url_real的开头第一个字符
+        strcat(m_url_real,m_url+2);//跳过m_url前两个字符，m_url一个字符为'/'，第二个字符为指示操作类型'2'或'3'
+        strncpy(m_real_file+len,m_url_real,FILENAME_LEN-len-1);//将新构造的路径复制到m_real_file中，从doc_root的结尾开始拼接，确保整个文件的路径在预定的长度限制之内
+        free(m_url_real);//释放内存，避免内存泄漏
+
+        //从CGI请求中提取用户提交的表单数据，特别是用户名和密码
+        //提取用户名
+        char name[100],password[100];//用于存储解析出的用户名和密码  
+        int i;
+        //m_string包含从客户端接收到的数据 例如"user=11111&passwd=22222"
+        for(i=5;m_string[i]!='&';++i)//i从5开始，因为"user="占据了前五个字节
+            name[i-5]=m_string[i];
+        name[i-5]='\0';//在name的末尾加上'\0'，确保它是一个有效的字符串
+        //提取密码
+        int j=0;
+        for(i = i+ 10;m_string[i] != '\0'; ++i, ++j)//从找到的字符'&'后加7个字符，因为"passwd="有七个字符
+            password[j]=m_string[i];
+        password[j]='\0';//在password的末尾加上'\0'，确保它是一共有效的字符串
+
+        // printf("Debug: name = %s, password = %s\n", name, password);
+
+        //服务器端处理注册请求 包括创建SQL查询以将新用户数据插入数据库，同时检查是否存在重名情况，并根据操作结果更新用户界面
+        if(*(p+1)=='3'){
+            //构建SQL插入语句
+            char *sql_insert=(char *)malloc(sizeof(char) * 200);//为sql_insert分配200字节
+            strcpy(sql_insert,"INSERT INTO user(username, passwd) VALUES('");
+            strcat(sql_insert,name);
+            strcat(sql_insert,"', '");
+            strcat(sql_insert,password);
+            strcat(sql_insert,"')");//构建了一个完整的SQL插入语句，用于向数据库的用户表('user')中添加新的用户名('username')和密码('passwd')
+            
+            //检查重名并执行SQL
+            if(users.find(name)==users.end()){//检查内存中的用户映射('users')是否已经包含该用户名，如果没有找到，即返回users.end()，表示无重名，可以进行注册
+                m_lock.lock();//确保在修改用户映射和执行数据库操作时线程安全
+                int res=mysql_query(mysql,sql_insert);//mysql_query执行前面构建的SQL插入语句 操作成功返回0
+
+                if (!res) {
+                    users.insert(pair<string, string>(name, password));
+                    //printf("Debug: Inserted into users: %s, %s\n", name, password);
+                }
+                users.insert(pair<string,string>(name,password));//把相同的一份name和password也插入服务器内存users中，保持内存数据与数据库MYSQL同步
+                m_lock.unlock();
+
+                //成功把注册用户名和密码插入了MYSQL数据库
+                if(!res){
+                    strcpy(m_url,"/log.html");//跳转到登陆界面
+                }else{
+                    //插入错误
+                    strcpy(m_url,"/registerError.html");
+                }
+            }else{
+                //重名错误
+                strcpy(m_url,"/registerError.html");
+            }
+            free(sql_insert);
+        }else if(*(p+1)=='2'){//如果是登陆，直接判断。若浏览器端输入的用户名和密码在内存数据库users中能找到，返回1 否则返回0
+
+            //printf("Debug: Attempting login for name = %s, password = %s\n", name, password);
+            //for (const auto &user : users) {
+            //    printf("Debug: users[%s] = %s\n", user.first.c_str(), user.second.c_str());
+            //}
+
+            if(users.find(name)!=users.end() && users[name]==password){
+                strcpy(m_url,"/welcome.html");
+            }else{
+                strcpy(m_url,"/logError.html");
+            }
+        }
+    }
     //====================================================      静        态        ===============================================================
     //检查URL中最后一个斜杠后的字符来决定加载哪个静态页面       如果是 '0'  加载到注册页面 '/register.html'
     // '1'  加载到登陆页面 '/log.html'              '5'   加载到图片展示页面 '/picture.html'
     // '6'  加载到视频播放页面 '/video.html'         '7'  加载到粉丝页面 '/fans.html'
     
     if(*(p+1)=='0'){
-        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        char *m_url_real=(char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real,"/register.html");
-        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        strncpy(m_real_file + len, m_url_real,strlen(m_url_real));
         free(m_url_real);
     }else if(*(p+1)=='1'){
-        char *m_url_real=(char *)malloc(sizeof(char)*200);
+        char *m_url_real=(char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real,"/log.html");
-        strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
+        strncpy(m_real_file + len,m_url_real, strlen(m_url_real));
         free(m_url_real);
     }else if(*(p+1)=='5'){
         char *m_url_real=(char *)malloc(sizeof(char)*200);
@@ -486,83 +567,12 @@ http_conn::HTTP_CODE http_conn::do_request(){
         strncpy(m_real_file+len,m_url_real,strlen(m_url_real));
         free(m_url_real);
     }else{
-        strncpy(m_real_file+len,m_url,FILENAME_LEN-len-1);
+        strncpy(m_real_file+len,m_url,FILENAME_LEN - len - 1);
     }
-
-
-
-    //======================================================    动       态        =============================================================
-    //处理CGI请求，动态地根据请求类型构造服务端资源路径。通过对URL的解析和路径的动态构建，服务器能够根据用户请求(如登陆或注册)返回相应的动态内容
-    //检查cgi变量是否为1，这表明当前请求需要通过CGI脚本来处理
-    //*(p+1)检查URL中斜杠后第一个字符,'2'通常代表登陆操作，'3'代表注册操作
-    if(cgi==1&&(*(p+1)=='2'||*(p+1)=='3')){
-        //判断是登陆还是注册
-        char flag=m_url[1];
-        //构造真实URL路径
-        char*m_url_real=(char *)malloc(sizeof(char) * 200);//分配一块内存在构造实际的文件路径
-        strcpy(m_url_real,"/");//令'/'为m_url_real的开头第一个字符
-        strcat(m_url_real,m_url+2);//跳过m_url前两个字符，m_url一个字符为'/'，第二个字符为指示操作类型'2'或'3'
-        strncpy(m_real_file+len,m_url_real,FILENAME_LEN-len-1);//将新构造的路径复制到m_real_file中，从doc_root的结尾开始拼接，确保整个文件的路径在预定的长度限制之内
-        free(m_url_real);//释放内存，避免内存泄漏
-
-        //从CGI请求中提取用户提交的表单数据，特别是用户名和密码
-        //提取用户名
-        char name[100],password[100];//用于存储解析出的用户名和密码  
-        int i;
-        //m_string包含从客户端接收到的数据 例如"user=11111&passwd=22222"
-        for(int i=5;m_string[i]!='&';++i){//i从5开始，因为"user="占据了前五个字节
-            name[i-5]=m_string[i];
-        }
-        name[i-5]='\0';//在name的末尾加上'\0'，确保它是一个有效的字符串
-        //提取密码
-        int j=0;
-        for(i=i+7;m_string[i]!='\0';++i,++j){//从找到的字符'&'后加7个字符，因为"passwd="有七个字符
-            password[j]=m_string[i];
-        }
-        password[j]='\0';//在password的末尾加上'\0'，确保它是一共有效的字符串
-
-        //服务器端处理注册请求 包括创建SQL查询以将新用户数据插入数据库，同时检查是否存在重名情况，并根据操作结果更新用户界面
-        if(*(p+1)=='3'){
-            //构建SQL插入语句
-            char *sql_insert=(char *)malloc(sizeof(char) * 200);//为sql_insert分配200字节
-            strcpy(sql_insert,"INSERT INTO user(username,passwd) VALUES(");
-            strcat(sql_insert,"'");
-            strcat(sql_insert,name);
-            strcat(sql_insert,"', '");
-            strcat(sql_insert,password);
-            strcat(sql_insert,"')");//构建了一个完整的SQL插入语句，用于向数据库的用户表('user')中添加新的用户名('username')和密码('passwd')
-            
-            //检查重名并执行SQL
-            if(users.find(name)==users.end()){//检查内存中的用户映射('users')是否已经包含该用户名，如果没有找到，即返回users.end()，表示无重名，可以进行注册
-                m_lock.lock();//确保在修改用户映射和执行数据库操作时线程安全
-                int res=mysql_query(mysql,sql_insert);//mysql_query执行前面构建的SQL插入语句 操作成功返回0
-                users.insert(pair<string,string>(name,password));//把相同的一份name和password也插入服务器内存users中，保持内存数据与数据库MYSQL同步
-                m_lock.unlock();
-
-                //成功把注册用户名和密码插入了MYSQL数据库
-                if(!res){
-                    strcpy(m_url,"/log.html");//跳转到登陆界面
-                }else{
-                    //插入错误
-                    strcpy(m_url,"/registerError.html");
-                }
-            }else{
-                //重名错误
-                strcpy(m_url,"/registerError.html");
-            }
-        }else if(*(p+1)=='2'){//如果是登陆，直接判断。若浏览器端输入的用户名和密码在内存数据库users中能找到，返回1 否则返回0
-            if(users.find(name)!=users.end()&&users[name]==password){
-                strcpy(m_url,"/welcome.html");
-            }else{
-                strcpy(m_url,"/logError.html");
-            }
-        }
-    }
-
 
     //文件存在性 权限 和类型检查
-    if(stat(m_real_file,&m_file_stat)<0)return NO_RESOURCE;//stat函数用于检验m_real_file是否有效，成功则返回0，并将m_real_file文件信息存储在m_file_stat中,失败返回 -1
-    if(!(m_file_stat.st_mode&S_IROTH))return FORBIDDEN_REQUEST;//文档没有适当的读权限
+    if(stat(m_real_file, &m_file_stat)<0)return NO_RESOURCE;//stat函数用于检验m_real_file是否有效，成功则返回0，并将m_real_file文件信息存储在m_file_stat中,失败返回 -1
+    if(!(m_file_stat.st_mode & S_IROTH))return FORBIDDEN_REQUEST;//文档没有适当的读权限
     if(S_ISDIR(m_file_stat.st_mode))return BAD_REQUEST;//请求的是一个目录而非文件   
 
     //打开文件  在确认文件存在且可以访问之后的操作
@@ -578,6 +588,7 @@ http_conn::HTTP_CODE http_conn::do_request(){
 }
 
 
+
 //unmap()函数  释放之前通过mmap()函数映射的文件内存区域 确保系统资源得到正确的释放，避免内存泄漏
 void http_conn::unmap(){
     //检查m_file_address释放存在
@@ -588,6 +599,7 @@ void http_conn::unmap(){
         m_file_address=0;
     }
 }
+
 
 //write()函数 使用非阻塞I/O 和边缘触发模式来高效地发送数据，同时处理部分写和EAGAIN错误(表示套接字缓冲区已满)
 bool http_conn::write(){
@@ -768,6 +780,7 @@ bool http_conn::process_write(HTTP_CODE ret){
                 add_headers(strlen(ok_string));
                 if(!add_content(ok_string))return false;
             }
+            break;
         }
         //其他情况
         default:
