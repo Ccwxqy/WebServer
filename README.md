@@ -4,8 +4,7 @@ A tiny web server project following a GitHub tutorial
 This project is a personal learning exercise based on the original project by [qingguoyi](https://github.com/qinguoyi/TinyWebServer)
 
 作为C++入门级项目，Webserver涵盖知识面广，对于新手的我来说也比较容易一些。本项目是自己跟着原作者代码一步一步实现的。唯一不同在于本人在学习原博主项目代码时，
-分别对每行代码进行了注释，一是强化自己的理解，二是方便后续对项目所设计知识点可以更好回顾。唯一没有手敲的是root下的一些前端html页面设计(能看懂html格式就好)。
-在运行原博主代码时，log.cpp函数可能会出现字符溢出的现象(不代表所有人，我在运行原博主的代码时是提示log.cpp文件有报错)，所以我对于log.cpp文件，我在log文件夹
+分别对每行代码进行了注释，一是强化自己的理解，二是方便后续对项目所设计知识点可以更好回顾。在运行原博主代码时，log.cpp函数可能会出现字符溢出的现象(不代表所有人，我在运行原博主的代码时是提示log.cpp文件有报错)，所以我对于log.cpp文件，我在log文件夹
 下多加了一个maybelog.cpp文件，在遇到错误时将原log.cpp文件替换为maybelog.cpp文件，即可执行。
 
 项目快速运行在本README.md文件最后
