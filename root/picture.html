@@ -1,15 +1,37 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>awsl</title>
-    </head>
-    <body><br/>
-<br/>
-<div align="center"><font size="5"> <strong>你居然想看图，不想关注我</strong></font></div>
-<br/>
-<!--<div  align="center">a w s l</div>-->
-<br/>
-<br/>
-<div align="center"><img src="./xxx.jpg" title="awsl"/></div>
+<head>
+    <meta charset="UTF-8">
+    <title>awsl</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+        }
+        .image-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        img {
+            max-width: 90%; /* Limits the image size and maintains aspect ratio */
+            height: auto;
+            border-radius: 5px; /* Optional: for rounded corners */
+        }
+    </style>
+</head>
+<body>
+    <div class="image-container">
+        <h2>辛苦的打工人</h2>
+        <img src="./dagongren.jpg" title="awsl" alt="努力的淦吧">
+    </div>
+</body>
 </html>

@@ -1,26 +1,55 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>WebServer</title>
-    </head>
-    <body>
-    <br/>
-    <br/>
-    <div align="center"><font size="5"> <strong>欢迎访问</strong></font></div>
-	<br/>
-		<br/>
-		<form action="0" method="post">
- 			<div align="center"><button type="submit">新用户</button></div>
-                </form>
-		<br/>
-                <form action="1" method="post">
-                        <div align="center"><button type="submit" >已有账号</button></div>
-                </form>
-		
-		
-        </div>
-    </body>
+<head>
+    <meta charset="UTF-8">
+    <title>WebServer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .welcome {
+            background-color: white;
+            padding: 40px 60px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 200px; /* Ensure that buttons have the same size */
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        h2 {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="welcome">
+        <h2><strong>欢迎访问</strong></h2>
+        <form action="0" method="post">
+            <button type="submit">新用户</button>
+        </form>
+        <form action="1" method="post">
+            <button type="submit">已有账号</button>
+        </form>
+    </div>
+</body>
 </html>
-
-

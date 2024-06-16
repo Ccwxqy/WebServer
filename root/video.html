@@ -1,17 +1,40 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>awsl</title>
-    </head>
-    <body><br/>
-<br/>
-<div align="center"><font size="5"> <strong>你居然想看视频，不想关注我</strong></font></div>
-<br/>
-
-<br/>
-<br/>
-<div align="center"><video width="906" height="506" controls>
-    <source src="xxx.mp4" type="video/mp4">
-</video></div>
+<head>
+    <meta charset="UTF-8">
+    <title>awsl</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .video-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        video {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px; /* Optional: for rounded corners */
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <h2>你居然想看视频，不想关注我</h2>
+        <video controls>
+            <source src="xxx.mp4" type="video/mp4">
+            您的浏览器不支持视频标签。
+        </video>
+    </div>
+</body>
 </html>

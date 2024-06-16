@@ -3,25 +3,57 @@
     <head>
         <meta charset="UTF-8">
         <title>WebServer</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background-color: #f4f4f4;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                flex-direction: column;
+            }
+            .choice {
+                background-color: white;
+                padding: 40px 60px;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                margin-top: 20px;
+            }
+            button {
+                background-color: #007BFF;
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 18px;
+                width: 200px;
+                margin-top: 10px;
+            }
+            button:hover {
+                background-color: #0056b3;
+            }
+            h2 {
+                color: #333;
+                margin-bottom: 20px;
+            }
+        </style>
     </head>
     <body>
-    <br/>
-    <br/>
-    <div align="center"><font size="5"> <strong>是时候做出选择了</strong></font></div>
-	<br/>
-		<br/>
-		<form action="5" method="post">
- 			<div align="center"><button type="submit">xxx.jpg</button></div>
-                </form>
-		<br/>
-                <form action="6" method="post">
-                        <div align="center"><button type="submit" >xxx.avi</button></div>
-                </form>
-		<br/>
-		<form action="7" method="post">
- 			<div align="center"><button type="submit">关注我</button></div>
-                </form>
-		
+        <div class="choice">
+            <h2>是时候做出选择了</h2>
+            <form action="5" method="post">
+                <div align="center"><button type="submit">xxx.jpg</button></div>
+            </form>
+            <form action="6" method="post">
+                <div align="center"><button type="submit">xxx.avi</button></div>
+            </form>
+            <form action="7" method="post">
+                <div align="center"><button type="submit">关注我</button></div>
+            </form>
         </div>
     </body>
 </html>
